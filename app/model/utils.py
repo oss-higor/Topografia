@@ -159,11 +159,12 @@ def getElevation(crs,point):
     QgsMessageLog.instance().logMessage(
         "http://maps.googleapis.com/maps/api/elevation/json?locations=" + str(pt[1]) + "," + str(
             pt[0]) + "&sensor=false", "Elevation")
-    conn.request("GET", "/maps/api/elevation/json?locations=" + str(pt[1]) + "," + str(pt[0]) + "&sensor=false")
-    response = conn.getresponse()
-    jsonresult = response.read()
-    elevation = 0.0
+
     try:
+        conn.request("GET", "/maps/api/elevation/json?locations=" + str(pt[1]) + "," + str(pt[0]) + "&sensor=false")
+        response = conn.getresponse()
+        jsonresult = response.read()
+        elevation = 0.0
         results = json.loads(jsonresult).get('results')
         print results
         if 0 < len(results):
@@ -173,5 +174,6 @@ def getElevation(crs,point):
     except Exception as e:
         print (e.message)
         qDebug(e.message)
+        elevation=0.0
 
     return elevation

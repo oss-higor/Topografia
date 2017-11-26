@@ -8,12 +8,11 @@ from PyQt4.QtCore import SIGNAL
 from qgis._gui import QgsMapToolEmitPoint
 from PIL import Image
 
-import matplotlib.pyplot as plt
-import numpy as np
+
 
 import math
 
-from ...perfil import Ui_PerfilTrecho
+from ...perfil import Ui_Perfil
 from ..model.estacas import Estacas as EstacasModel
 from ..model.knn import KNN
 from ..model.utils import *
@@ -91,9 +90,16 @@ class Estacas:
 
     def perfil(self):
         tipo, class_project = self.model.tipo()
-        p = Ui_PerfilTrecho(self.view, tipo, class_project)
-        p.show()
-        p.exec_()
+        self.perfil = Ui_Perfil(self.view, tipo, class_project)
+        self.perfil.save.connect(self.saveGreide)
+        self.perfil.show()
+        self.perfil.exec_()
+
+    def saveGreide(self):
+        if self.model.id_filename == -1: return
+        self.model.table = self.perfil.getVertices()
+        #QtGui.QMessageBox.information(self.iface.mainWindow(),"Debug",str(self.model.table))   
+        self.model.saveGreide()       
 
     def recalcular(self):
         self.view.clear()

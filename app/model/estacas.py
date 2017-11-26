@@ -10,6 +10,9 @@ from ..model.curvas import Curvas
 from ..model.utils import pairs, length, dircos, diff, azimuth, getElevation
 
 
+
+from qgis.PyQt import QtGui
+
 class Estacas:
     def __init__(self, distancia=20, estaca=0, layer=None, filename='', table=list(), ultimo=-1, id_filename=-1):
         self.distancia = distancia
@@ -128,6 +131,26 @@ class Estacas:
 
         compactZIP(Config.fileName)
 
+    def saveGreide(self):
+        extractZIP(Config.fileName)
+        con = sqlite3.connect("tmp/data/data.db")
+        con.execute("DELETE FROM GREIDE")
+        con.commit()
+        for linha in self.table:
+
+            lt = tuple(linha)
+
+            con.execute(
+                   "INSERT INTO GREIDE (x,cota)values(?,?)",
+                   lt)
+
+        con.execute("VACUUM")
+        con.commit()
+        con.close()
+
+        compactZIP(Config.fileName)
+
+        
     def openCSV(self, filename, fileDB):
         extractZIP(Config.fileName)
         con = sqlite3.connect("tmp/data/data.db")

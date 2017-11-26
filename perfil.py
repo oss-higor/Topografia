@@ -7,8 +7,71 @@
 # WARNING! All changes made in this file will be lost!
 
 from PyQt4 import QtCore, QtGui
-import matplotlib.pyplot as plt
 import numpy as np
+import pyqtgraph as pg
+
+
+
+
+
+class CustomViewBox(pg.ViewBox):
+      def __init__(self, *args, **kwds):
+          pg.ViewBox.__init__(self, *args, **kwds)
+          self.setMouseMode(self.RectMode)
+          
+      ## reimplement mid-click to zoom out
+      def mouseClickEvent(self, ev):
+          if ev.button() == QtCore.Qt.MidButton:
+              self.autoRange()
+
+      def mouseDragEvent(self, ev):
+          if ev.button() == QtCore.Qt.RightButton:
+              ev.ignore()
+          else:
+              pg.ViewBox.mouseDragEvent(self, ev)
+
+
+class CustomPolyLineROI(pg.PolyLineROI):
+    def __init__(self, *args, **kwds):
+        pg.PolyLineROI.__init__(self,*args,**kwds)
+
+
+    def setPoints(self, points, closed=None):
+
+        if closed is not None:
+            self.closed = closed
+        
+        self.clearPoints()
+        
+        for p in points:
+            self.addRotateHandle(p,p)
+            
+        start = -1 if self.closed else 0
+        for i in range(start, len(self.handles)-1):
+            self.addSegment(self.handles[i]['item'], self.handles[i+1]['item']) 
+        
+
+
+
+    def segmentClicked(self, segment, ev=None, pos=None): ## pos should be in this item's coordinate system
+        if ev != None:
+            pos = segment.mapToParent(ev.pos())
+        elif pos != None:
+            pos = pos
+        else:
+            raise Exception("Either an event or a position must be given.")
+        if ev.button() == QtCore.Qt.RightButton:
+            pass
+        else:
+            h1 = segment.handles[0]['item']
+            h2 = segment.handles[1]['item']
+            
+            i = self.segments.index(segment)
+            h3 = self.addFreeHandle(pos, index=self.indexOfHandle(h2))
+            self.addSegment(h3, h2, index=i+1)
+            segment.replaceHandle(h2, h3)
+            
+
 
 try:
     _fromUtf8 = QtCore.QString.fromUtf8
@@ -24,27 +87,24 @@ except AttributeError:
     def _translate(context, text, disambig):
         return QtGui.QApplication.translate(context, text, disambig)
 
-class Ui_PerfilTrecho(QtGui.QDialog):
+
+   
+   
+class Ui_Perfil(QtGui.QDialog):
+    save = QtCore.pyqtSignal()
     def __init__(self, ref_estaca, tipo, classeProjeto):
-        super(Ui_PerfilTrecho, self).__init__(None)
+        super(Ui_Perfil, self).__init__(None)
         self.ref_estaca = ref_estaca
         self.tipo = tipo
         self.classeProjeto = classeProjeto
         self.estaca1txt = -1
         self.estaca2txt = -1
+        self.vb=CustomViewBox() 
+        self.perfilPlot = pg.PlotWidget(viewBox=self.vb,  enableMenu=False, title="Perfil Longitudinal")
+
         self.setupUi(self)
 
-    def calcI(self,p1, p2):
-
-        try:
-            prog1 = float(self.ref_estaca.tableWidget.item(p1, 2).text())
-            prog2 = float(self.ref_estaca.tableWidget.item(p2, 2).text())
-
-            cota1 = float(self.ref_estaca.tableWidget.item(p1, 5).text())
-            cota2 = float(self.ref_estaca.tableWidget.item(p2, 5).text())
-            return ((cota2 - cota1) / (prog2 - prog1)) * 100
-        except:
-            return 0
+  
 
     def perfil_grafico(self):
         pontos = []
@@ -62,22 +122,38 @@ class Ui_PerfilTrecho(QtGui.QDialog):
             except:
                 break
             k += 1
+       
         x,y=zip(*pontos)
-        fig = plt.figure()
-
-
-        ax = fig.add_subplot(111)
-        ax.stackplot(x,y)
-        fig.canvas.set_window_title('Perfil topografico') 
-        fig.tight_layout()
-        plt.xlabel('Progressiva')
-        plt.ylabel('Cota')
-        #plt.title('Perfil topografico')
-        plt.show()
-        return pontos
+        x=list(x)
+        y=list(y)       
         
+        
+        self.perfilPlot.plot(x=x, y=y, symbol='o')
+
+        self.perfilPlot.setWindowTitle('pyqtgraph example: customPlot')
+        A = np.array([x,np.ones(len(x))])
+        w = np.linalg.lstsq(A.T,y)[0]
+        r = CustomPolyLineROI([(x[0],w[0]*x[0]+w[1]), (x[len(x)-1],w[0]*x[len(x)-1]+w[1])])
+        r.setAcceptedMouseButtons(QtCore.Qt.RightButton)
+        self.perfilPlot.addItem(r)
+        self.greide=r
+
+
+
+    def calcI(self,p1, p2):
+    
+        try:
+            prog1 = float(self.ref_estaca.tableWidget.item(p1, 2).text())
+            prog2 = float(self.ref_estaca.tableWidget.item(p2, 2).text())
+
+            cota1 = float(self.ref_estaca.tableWidget.item(p1, 5).text())
+            cota2 = float(self.ref_estaca.tableWidget.item(p2, 5).text())
+            return ((cota2 - cota1) / (prog2 - prog1)) * 100
+        except:
+            return 0
 
     def calcular(self):
+
         p1 = self.calcI(self.estaca1txt,self.estaca2txt)
         classeProjeto = self.classeProjeto
         if p1>=float(self.tipo[0]) and p1<float(self.tipo[1]):
@@ -90,9 +166,9 @@ class Ui_PerfilTrecho(QtGui.QDialog):
             else:
                 s = "60"
             self.lblTipo.setText("Plano %s KM/h"%(s))
-            for k in range(int(self.estaca1txt),int(self.estaca2txt)+1):
-                for j in range(self.ref_estaca.tableWidget.columnCount()):
-                    self.ref_estaca.tableWidget.item(k, j).setBackground(QtGui.QColor(51,153,255))
+         #   for k in range(int(self.estaca1txt),int(self.estaca2txt)+1):
+         #       for j in range(self.ref_estaca.tableWidget.columnCount()):
+         #           self.ref_estaca.tableWidget.item(k, j).setBackground(QtGui.QColor(51,153,255))
 
         elif p1>=float(self.tipo[2]) and p1<float(self.tipo[3]):
             if classeProjeto<=0:
@@ -121,9 +197,79 @@ class Ui_PerfilTrecho(QtGui.QDialog):
             else:
                 s = "30"
             self.lblTipo.setText("Montanhoso %s KM/h"%(s))
+          #  for k in range(int(self.estaca1txt),int(self.estaca2txt)+1):
+          #      for j in range(self.ref_estaca.tableWidget.columnCount()):
+          #          self.ref_estaca.tableWidget.item(k, j).setBackground(QtGui.QColor(255,51,51))
+
+
+
+
+    def calcularGreide(self):
+        self.greide.getMenu()
+        i=0
+        g1=[]
+        g2=[]
+        for handle in self.greide.getHandles():
+            if i==0:
+                g1.append(handle.scenePos().x())
+                g1.append(handle.scenePos().y())
+            if i==1:
+
+                g2.append(handle.scenePos().x())
+                g2.append(handle.scenePos().y())
+    
+            if i>1:
+                break
+            i+=1
+                
+
+        p1 =abs((g1[1] - g2[1]) / (g1[0] - g2[0])) * 100
+        classeProjeto = self.classeProjeto
+        if p1>=float(self.tipo[0]) and p1<float(self.tipo[1]):
+            if classeProjeto<=0:
+                s = "120"
+            elif classeProjeto <4:
+                s = "100"
+            elif classeProjeto <6:
+                s = "80"
+            else:
+                s = "60"
+            self.lblTipo.setText("Plano %s KM/h"%(s))
             for k in range(int(self.estaca1txt),int(self.estaca2txt)+1):
                 for j in range(self.ref_estaca.tableWidget.columnCount()):
-                    self.ref_estaca.tableWidget.item(k, j).setBackground(QtGui.QColor(255,51,51))
+                    self.ref_estaca.tableWidget.item(k, j).setBackground(QtGui.QColor(51,153,255))
+
+        elif p1>=float(self.tipo[2]) and p1<float(self.tipo[3]):
+            if classeProjeto<=0:
+                s = "100"
+            elif classeProjeto <3:
+                s = "80"
+            elif classeProjeto <4:
+                s = "70"
+            elif classeProjeto <6:
+                s = "60"
+            else:
+                s = "40"
+            self.lblTipo.setText("Ondulado %s KM/h"%(s))
+ #           for k in range(int(self.estaca1txt),int(self.estaca2txt)+1):
+ #               for j in range(self.ref_estaca.tableWidget.columnCount()):
+ #                   self.ref_estaca.tableWidget.item(k, j).setBackground(QtGui.QColor(255,253,150))
+        else:
+            if classeProjeto<=0:
+                s = "80"
+            elif classeProjeto <3:
+                s = "60"
+            elif classeProjeto <4:
+                s = "50"
+            elif classeProjeto <6:
+                s = "40"
+            else:
+                s = "30"
+            self.lblTipo.setText("Montanhoso %s KM/h"%(s))
+ #           for k in range(int(self.estaca1txt),int(self.estaca2txt)+1):
+#                for j in range(self.ref_estaca.tableWidget.columnCount()):
+#                    self.ref_estaca.tableWidget.item(k, j).setBackground(QtGui.QColor(255,51,51))
+
 
     def estaca1(self,ind):
         self.estaca1txt = ind-1
@@ -132,6 +278,8 @@ class Ui_PerfilTrecho(QtGui.QDialog):
         self.estaca2txt = ind-1
 
     def setupUi(self, PerfilTrecho):
+
+    
         PerfilTrecho.setObjectName(_fromUtf8("PerfilTrecho"))
         PerfilTrecho.resize(590, 169)
         self.comboEstaca1 = QtGui.QComboBox(PerfilTrecho)
@@ -168,7 +316,7 @@ class Ui_PerfilTrecho(QtGui.QDialog):
             except:
                 break
             k += 1
-
+        self.perfil_grafico()
         self.comboEstaca2.currentIndexChanged.connect(self.estaca2)
 
 
@@ -185,10 +333,61 @@ class Ui_PerfilTrecho(QtGui.QDialog):
         self.btnCalcular.setGeometry(QtCore.QRect(260, 80, 99, 27))
         self.btnCalcular.setObjectName(_fromUtf8("btnCalcular"))
         self.btnCalcular.clicked.connect(self.calcular)
-        self.perfil_grafico()
+        
+        self.btnAutoRange=QtGui.QPushButton(PerfilTrecho)
+        self.btnAutoRange.setGeometry(QtCore.QRect(260, 80, 99, 27))
+        self.btnAutoRange.setText("Auto")
 
-        self.retranslateUi(PerfilTrecho)
+        self.btnSave=QtGui.QPushButton(PerfilTrecho)
+        self.btnSave.setGeometry(QtCore.QRect(260, 80, 99, 27))
+        self.btnSave.setText("Save")
+        self.btnSave.clicked.connect(self.salvarPerfil)
+
+
+
+        Hlayout=QtGui.QHBoxLayout()
+        Vlayout=QtGui.QVBoxLayout()
+
         QtCore.QMetaObject.connectSlotsByName(PerfilTrecho)
+
+        Hlayout.addWidget(self.comboEstaca1)
+        Hlayout.addWidget(self.label)
+        Hlayout.addWidget(self.comboEstaca2)
+        Hlayout.addWidget(self.label_2)
+        Hlayout.addWidget(self.lblTipo)
+        Hlayout.addWidget(self.btnCalcular)
+        Vlayout.addWidget(self.btnAutoRange) 
+        Vlayout.addWidget(self.btnSave) 
+
+        Vlayout.addLayout(Hlayout)
+        Vlayout.addWidget(self.perfilPlot)
+
+        self.showMaximized()
+
+        self.greide.sigClicked.connect(self.calcularGreide)
+
+        self.setLayout(Vlayout)          
+        self.retranslateUi(PerfilTrecho)
+
+
+
+
+    def salvarPerfil(self):
+        #exportar greide para csv e referenciar no banco de dados
+        ##sinal emitido para salvar
+
+        self.save.emit()
+
+    def getVertices(self):
+
+        r=[]
+        for handle in self.greide.getHandles():
+           x=[]
+           x.append(str(handle.scenePos().x())) 
+           x.append(str(handle.scenePos().y())) 
+           r.append(x)
+        
+        return r
 
 
     def retranslateUi(self, PerfilTrecho):
@@ -199,4 +398,5 @@ class Ui_PerfilTrecho(QtGui.QDialog):
         self.label_2.setText(_translate("PerfilTrecho", "Estaca 2", None))
         self.lblTipo.setText(_translate("PerfilTrecho", "Plano", None))
         self.btnCalcular.setText(_translate("PerfilTrecho", "Calcular", None))
+
 

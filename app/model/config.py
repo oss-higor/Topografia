@@ -115,6 +115,17 @@ class Config:
                     "data DATETIME DEFAULT CURRENT_TIMESTAMP,"
                     "FOREIGN KEY(CURVA_id) REFERENCES CURVA(id)"
                     ")")
+        con.execute("CREATE TABLE if not exists GREIDE"
+                    "(id INTEGER primary key AUTOINCREMENT,"
+                    "x DOUBLE,"
+                    "cota DOUBLE"
+                    ")")
+## TABELA A IMPLEMENTAR:
+        con.execute("CREATE TABLE if not exists CURVA_VERTICAL"
+                    "(id INTEGER primary key AUTOINCREMENT,"
+                    "x DOUBLE,"
+                    "cota DOUBLE"
+                    ")")
 
         con.commit()
         return con
@@ -238,3 +249,4 @@ class Config:
 
     def mudancaClasseProjeto(self, pos):
         self.class_project = pos - 1
+
